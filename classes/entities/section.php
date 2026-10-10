@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage the entity "course"
  *
@@ -26,24 +27,36 @@ namespace local_ezxlate\entities;
 
 /**
  * Class to manage a course section
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class section extends \local_ezxlate\entity {
-    
+    /** @var string $maintable main table of the entity */
     protected $maintable = "course_sections";
-    
+
+    /**
+     * Define the managed fields and sub-entities of this entity
+     */
     protected function define_fields() {
         $this->add_fields("name", "summary");
         $modules = [];
-        foreach(explode(",", $this->record("sequence")) as $cmid) {
+        foreach (explode(",", $this->record("sequence")) as $cmid) {
             $modulename = $this->get_module_name($cmid);
-            if ($modulename == "subsection") continue;
-            if (!empty($modulename)) $modules[$cmid] = $modulename;
+            if (empty($modulename)) {
+                continue;
+            }
+            if ($modulename == "subsection") {
+                continue;
+            }
+            // Question banks (mod_qbank, Moodle 5.0+) are activities but not course content.
+            if (!plugin_supports("mod", $modulename, "candisplay", true)) {
+                continue;
+            }
+            $modules[$cmid] = $modulename;
         }
         $this->add_direct("modules", $modules)->only_get();
     }

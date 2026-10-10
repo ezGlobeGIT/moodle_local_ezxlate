@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage the entity "question"
  *
@@ -26,43 +27,56 @@ namespace local_ezxlate\entities;
 
 /**
  * Class to manage a question text tree
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class question extends \local_ezxlate\entity {
-    
+    /** @var string $maintable main table of the entity */
     protected $maintable = "question";
-    
+
+    /**
+     * Define the managed fields and sub-entities of this entity
+     */
     protected function define_fields() {
-        if (!is_numeric($this->record("questiontext"))) $this->add_field("questiontext");
+        if (!is_numeric($this->record("questiontext"))) {
+            $this->add_field("questiontext");
+        }
         $this->add_field("generalfeedback");
-        // Detailled feedback
+        // Detailled feedback.
         $type = $this->record("qtype");
         $fbfields = [ "correctfeedback", "partiallycorrectfeedback", "incorrectfeedback" ];
-        if ($type == "multichoice")
+        if ($type == "multichoice") {
             $this->link_table("qtype_multichoice_options", "questionid", $fbfields);
-        else if ($type == "match")
+        } else if ($type == "match") {
             $this->link_table("qtype_match_options", "questionid", $fbfields);
-        else if ($type == "ordering")
+        } else if ($type == "ordering") {
             $this->link_table("qtype_ordering_options", "questionid", $fbfields);
-        else if ($type == "randomsamatch")
+        } else if ($type == "randomsamatch") {
             $this->link_table("qtype_randomsamatch_options", "questionid", $fbfields);
-        else if ($type == "calculated")
+        } else if ($type == "calculated") {
             $this->link_table("question_calculated_options", "question", $fbfields);
-        else if ( ! in_array($type, [ "multianswer", "numerical", "truefalse", "essay", "shortanswer"])) {
+        } else if (! in_array($type, [ "multianswer", "numerical", "truefalse", "essay", "shortanswer"])) {
             $record = $this->link_table("qtype_$type", "questionid", $fbfields);
-            if (empty($record)) $record = $this->link_table("question_$type", "question", $fbfields);
+            if (empty($record)) {
+                $record = $this->link_table("question_$type", "question", $fbfields);
+            }
         }
-        //answers
+        // Answers.
         $this->add_entities_from_table("answers", [ "answer", "feedback"], "question_answers", "question");
-        // subquestions
-        if (($type == "match"))
-            $this->add_entities_from_table("subquestions", [ "questiontext", "answertext"], "qtype_match_subquestions", "questionid");
-        // hints
-        $this->add_entities_from_table("hints",  [ "hint"], "question_hints", "questionid");
+        // Subquestions.
+        if (($type == "match")) {
+            $this->add_entities_from_table(
+                "subquestions",
+                [ "questiontext", "answertext"],
+                "qtype_match_subquestions",
+                "questionid"
+            );
+        }
+        // Hints.
+        $this->add_entities_from_table("hints", [ "hint"], "question_hints", "questionid");
     }
 }

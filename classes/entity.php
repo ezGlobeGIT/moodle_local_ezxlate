@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage an entity supported by API
  *
@@ -24,16 +25,16 @@
 
 namespace local_ezxlate;
 
-/**  
+/**
  * Class to manage an entity (for exemple an activity, a question), with its dependecies
- * 
+ *
  * This class can be used for a generic entity, or overload for specific entities
- *  
- * This class has several categories of public methods 
+ *
+ * This class has several categories of public methods
  *   - methods to describe the tree :
  *        __construct : general definition of the entity, with main table and managed fields in main table
  *        define_fields : method to oveload in inherited classes, to define all fields and nodes
- * 
+ *
  *   - methods to build the tree (used mainly in define_fields)
  *        add_direct : to direcly add a node (of any type) with its name and it's value
  *        add_field : to add a node of type field (with the informations to reach it)
@@ -42,18 +43,18 @@ namespace local_ezxlate;
  *        add_fields : to add several node of type field take in the current line (with alisas on names)
  *        add_entities_from_table : to add an node which is a list of entities (class entities), directly form a table
  *        only_get : to tell this entity is available only to get information and can't be updated
- *        
- * 
+ *
+ *
  *   - methods to get the tree
  *        get : get the tree
- * 
+ *
  *   - methods to updates fields of the tree, and get the status of udating
  *        error : declare an error
  *        update : update texts in the tree
  *        get_errors : get the tree of errors
- *         
- * 
- *   - tools 
+ *
+ *
+ *   - tools
  *       get_module_name : get the name of the module (activity plugin) for a cmid
  *       record : to get the current line in the database when needed
  *
@@ -62,169 +63,207 @@ namespace local_ezxlate;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class entity implements tree_interface {
-    
     /** @var string $maintable table name to get mains fields, can be defined in inherited class */
-    protected $maintable;       
-    
+    protected $maintable;
+
     /** @var bool $onlyget true if this entity can't be updated */
     protected $onlyget = false;
-    
+
     /** @var int $id primary key in the table for the current entity */
     protected $id;
-    
+
     /** @var array $fields direct nodes of this entity's tree, indexes are the names, value is a node (tree_interface) */
     protected $fields = [];
-    
+
     /** @var int|stdClass $record content of the record (row) from database, -1 if not loaded */
     protected $record = -1;
-    
-    /** @var array $otherTables array of record from other tables */
-    protected $otherTables = [];
-    
-    /** @var array $otherDef definition of other tables, index is the alias, value is an array of tableName, id value */
-    protected $otherDef = [];    // [ code => [ table, id ], .... ]
-    
+
+    /** @var array $othertables array of record from other tables */
+    protected $othertables = [];
+
+    /** @var array $otherdef definition of other tables, index is the alias, value is an array of tableName, id value */
+    protected $otherdef = [];
+
     /** @var string $error result code of update ("ok" or error code) */
     protected $error = 'ok';
-    
-    /** @var array $fieldsError array of errors for fields (nodes) index is node name, value is "ok" or error code */
-    protected $fieldsError = [];
-    
-    
+
+    /** @var array $fieldserror array of errors for fields (nodes) index is node name, value is "ok" or error code */
+    protected $fieldserror = [];
+
+
     /* ============================================
      * Management of modules names (static)
-     * ============================================ */ 
-    
-    /** @var array  cache for module name, by module Id */
-    static protected $modules = null;  // [ moduleId => moduleName, .... ]
-    
+     * ============================================ */
+
+    /** @var array $modules cache for module names: [ moduleid => moduleName, .... ] */
+    protected static $modules = null;
+
+    /**
+     * Load the names of all modules in the cache
+     */
     protected static function make_modules() {
         static::$modules = [];
-        foreach(database::get_all("modules")  as $record) {
+        foreach (database::get_all("modules") as $record) {
             static::$modules[$record->id] = $record->name;
         }
     }
-    
-    static function module_name($moduleId) {
-        if (is_null(static::$modules)) static::make_modules();
-        if (isset(static::$modules[$moduleId])) return static::$modules[$moduleId];
-        else return "";
+
+    /**
+     * Get the name of a module (plugin name, ie "quiz") from its id
+     *
+     * @param int $moduleid id of the module (table modules)
+     * @return string name of the module, empty if not found
+     */
+    public static function module_name($moduleid) {
+        if (is_null(static::$modules)) {
+            static::make_modules();
+        }
+        if (isset(static::$modules[$moduleid])) {
+            return static::$modules[$moduleid];
+        } else {
+            return "";
+        }
     }
-     
+
     /**
      * Constructor
-     * 
+     *
      * @param int|stdClass id of row to load, or content of the row
      * @param string $maintable table where the record is loaded, null possible if the attribut mainTable is set
      * @return array $fields list of field to make nodes directly, editable nodes
-     * @return array $protectedFields list of field to make read only nodes directly
+     * @return array $protectedfields list of field to make read only nodes directly
      */
-    function __construct($idOrRecord, $maintable = null, $fields = [], $protectedFields = []) {
-        if (is_array($idOrRecord)) $idOrRecord = (object) $idOrRecord;
-        if (is_object($idOrRecord)) {
-            $this->record = $idOrRecord;
+    public function __construct($idorrecord, $maintable = null, $fields = [], $protectedfields = []) {
+        if (is_array($idorrecord)) {
+            $idorrecord = (object) $idorrecord;
+        }
+        if (is_object($idorrecord)) {
+            $this->record = $idorrecord;
             $this->id = $this->record(database::id_name($this->maintable));
-        } else $this->id = $idOrRecord;
-        if (!empty($maintable)) $this->maintable = $maintable;
-        foreach($protectedFields as $name => $value) $this->add_direct($name, $value)->only_get();
-        if (!empty($fields)) $this->add_fields(...$fields);
+        } else {
+            $this->id = $idorrecord;
+        }
+        if (!empty($maintable)) {
+            $this->maintable = $maintable;
+        }
+        foreach ($protectedfields as $name => $value) {
+            $this->add_direct($name, $value)->only_get();
+        }
+        if (!empty($fields)) {
+            $this->add_fields(...$fields);
+        }
         $this->define_fields();
     }
-    
+
     /**
      * Other nodes definition (not define in constructor parameters)
-     * 
+     *
      * Class called by constructor, to overload in inherited classes
      */
     protected function define_fields() {
-
     }
-    
+
     /**
      * Add a node with it's value
-     * 
+     *
      * @param string $name name of the node
      * @param local_ezxlate\tree_interface $value value of the node (can be a single value, a field, an entity, a list of entities)
      * @return local_ezxlate\tree_interface the value of the created node
      */
-    function add_direct($name, $value) {
-        // Add fields from name and value
-        if (! $value instanceof field and ! $value instanceof entities)
+    public function add_direct($name, $value) {
+        // Add fields from name and value.
+        if (! $value instanceof field && ! $value instanceof entities) {
             $value = new value($value);
+        }
         $this->fields[$name] = $value;
         return $this->fields[$name];
     }
-    
+
     /**
      * Add some nodes froms fields (columns) of the current table
-     * 
+     *
      * @param string ...$names names of the columns from main table to add
      */
-    function add_fields(...$names) {
+    public function add_fields(...$names) {
         // Add fields from this table
-        // each name is dbname or alias:dbname
-        foreach($names as $name) $this->add_field($name);
+        // each name is dbname or alias:dbname.
+        foreach ($names as $name) {
+            $this->add_field($name);
+        }
     }
 
     /**
      * Add a table with an alias name, and fields of this table as nodes
-     * 
+     *
      * @param string $name alis name for the table
      * @param string $table name of the table in the database
      * @param stdClass @record record of the line from the table to add
      * @param array $fields array of field names to add directly as nodes (names can be alias:columnName)
      * @return local_ezxlate\field the value of the created node
-     */     
-    function add_table($name, $table, $record, $fields = []) {
-        // Add table's record to define more fields
+     */
+    public function add_table($name, $table, $record, $fields = []) {
+        // Add table's record to define more fields.
         $idname = database::id_name($table);
-        $this->otherDef[$name] = [ $table, $record->$idname];
-        $this->otherTables[$name] = $record;
-        foreach($fields as $fieldName) $this->add_field($fieldName, $name);
+        $this->otherdef[$name] = [ $table, $record->$idname];
+        $this->othertables[$name] = $record;
+        foreach ($fields as $fieldname) {
+            $this->add_field($fieldname, $name);
+        }
     }
 
     /**
      * Add a node (type field) from a colmun of an other table
-     * 
+     *
      * @param string $name name of the field in the table, or alias:name
-     * @param string $aliasTableName alias name of the table (previously declared by add_table() )
+     * @param string $aliastablename alias name of the table (previously declared by add_table() )
      * @return local_ezxlate\field the value of the created node
-     */    
-    function add_field($name, $aliasTableName = null) {
-        // name is dbname or alias:dbname
+     */
+    public function add_field($name, $aliastablename = null) {
+        // Name is dbname or alias:dbname.
         if (strpos($name, ":")) {
             $name = explode(":", $name);
             $alias = $name[0];
             $name = $name[1];
-        } else $alias = $name;
-        if (is_null($aliasTableName)) {
+        } else {
+            $alias = $name;
+        }
+        if (is_null($aliastablename)) {
             $field = new field($this->record(), $this->maintable, $this->id, $name);
         } else {
-            $field = new field($this->otherTables[$name], $this->otherDef[$aliasTableName][0], $this->otherDef[$aliasTableName][1], $name);
+            $field = new field(
+                $this->othertables[$aliastablename],
+                $this->otherdef[$aliastablename][0],
+                $this->otherdef[$aliastablename][1],
+                $name
+            );
         }
         $this->fields[$alias] = $field;
         return $field;
     }
-    
+
     /**
      * Join a table and add field nodes
-     * 
+     *
      * @param string $table name of the table to join in database
-     * @param string|array $join way to join the table : 
+     * @param string|array $join way to join the table :
      *      the name of the field of main table that must be equal to the id of joined table
      *      or an array [ target => local ] to explain mainTable.local = joinedTable.target
      * @param array $fields array of field names to add directly as nodes (names can be alias:columnName)
      * @return stdClass record for the raw of new table joined
-     */      
-    function link_table($table, $join, $fields = []) {
+     */
+    public function link_table($table, $join, $fields = []) {
         if (is_array($join)) {
-            foreach($join as $targetname=>$thisname) break;
+            foreach ($join as $targetname => $thisname) {
+                break;
+            }
         } else {
             $targetname = $join;
             $thisname = database::id_name($this->maintable);
         }
         $record = database::get($table, $this->record($thisname), $targetname);
-        if (empty($record)) return null;
+        if (empty($record)) {
+            return null;
+        }
         $idname = database::id_name($table);
         $id = $record->$idname;
         foreach ($fields as $name) {
@@ -232,7 +271,9 @@ class entity implements tree_interface {
                 $name = explode(":", $name);
                 $alias = $name[0];
                 $name = $name[1];
-            } else $alias = $name;
+            } else {
+                $alias = $name;
+            }
             $field = new field($record, $table, $id, $name);
             $this->fields[$alias] = $field;
         }
@@ -241,83 +282,119 @@ class entity implements tree_interface {
 
     /**
      * Join a table with a back-link, so add an entities node
-     * 
+     *
      * @param string $name name of the node
      * @param string|array type $entityname of entity to join
      *          if string : name of an entity (name of a class of namespace local_ezxlate\entities, ie question)
      *          if array : fields name to make enties with the fields as nodes
      * @param string $table name of the table to join in the database
-     * @param string|array $join way to join the table : 
+     * @param string|array $join way to join the table :
      *      the name of the field of joined table that must be equal to the id of main table
      *      or an array [ target => local ] to explain mainTable.local = joinedTable.target
      * @param string $indexon name of the field to take the indexes of entities list (default is the primary key)
      * @return local_ezxlate\entities created node
-     */        
-    function add_entities_from_table($name, $entityname, $table, $join, $indexon = null) {
-        if (is_null($indexon)) $indexon = database::id_name($table);
+     */
+    public function add_entities_from_table($name, $entityname, $table, $join, $indexon = null) {
+        if (is_null($indexon)) {
+            $indexon = database::id_name($table);
+        }
         if (is_array($join)) {
-            foreach($join as $targetname=>$thisname) break;
+            foreach ($join as $targetname => $thisname) {
+                break;
+            }
         } else {
             $targetname = $join;
             $thisname = database::id_name($this->maintable);
         }
         $values = database::get_all($table, $this->record($thisname), $targetname);
-        if (is_array($entityname)) array_unshift($entityname, $table);
+        if (is_array($entityname)) {
+            array_unshift($entityname, $table);
+        }
         $this->fields[$name] = new entities($values, $entityname, $indexon);
         return $this->fields[$name];
     }
-    
+
+    /**
+     * Tell the gradebook item names follow a field of this node (the name of an activity)
+     *
+     * @param string $name name of the field
+     * @return entity this object
+     */
+    public function follow_gradebook($name) {
+        if (isset($this->fields[$name])) {
+            $this->fields[$name]->gradebook();
+        }
+        return $this;
+    }
+
     /**
      * Extract branch from this node
-     * 
+     *
      * @return array|string|int full tree from this node or value of the node
      */
-    function get() {
+    public function get() {
         $result = [];
-        foreach($this->fields as $name => $obj) {
+        foreach ($this->fields as $name => $obj) {
             $objresult = $obj->get();
-            if ( ! empty($objresult) or $objresult === 0 or $objresult === "0" )
+            if (! empty($objresult) || $objresult === 0 || $objresult === "0") {
                     $result[$name] = $objresult;
+            }
         }
         return $result;
     }
-    
+
 
     /**
      * Give the module name (activity plugin name) for a cmid
-     * 
+     *
      * @param int $cmid id of the module in course_modules
      * @return string module name
      */
-    function get_module_name($cmid) {
-        if (is_null(static::$modules)) static::make_modules();
+    public function get_module_name($cmid) {
+        if (is_null(static::$modules)) {
+            static::make_modules();
+        }
         $cm = database::get("course_modules", $cmid);
-        if (empty($cm)) return "";
-        if (isset(static::$modules[$cm->module])) return static::$modules[$cm->module];
-        else return "";
+        if (empty($cm)) {
+            return "";
+        }
+        if (isset(static::$modules[$cm->module])) {
+            return static::$modules[$cm->module];
+        } else {
+            return "";
+        }
     }
 
     /**
      * Get the value of a column, or the whole row, for the current row in main table (request it in database if needed)
-     * 
+     *
      * @param string|null $name name of the field, null to get the full row
      * @return stdClass|mixed object for the row, or value of the column in this row
      */
     protected function record($name = null) {
-        // Get the curent record from database
-        if ( ! is_object($this->record) and $this->record == -1) {
+        // Get the curent record from database.
+        if (! is_object($this->record) && $this->record == -1) {
             $record = database::get($this->maintable, $this->id);
-            if (empty($record)) $record = new \stdClass();
+            if (empty($record)) {
+                $record = new \stdClass();
+            }
             $this->record = $record;
-        } else $record = $this->record;
-        if (empty($name)) return $record;
-        if (isset($record->$name)) return $record->$name;
-        else return null;
+        } else {
+            $record = $this->record;
+        }
+        if (empty($name)) {
+            return $record;
+        }
+        if (isset($record->$name)) {
+            return $record->$name;
+        } else {
+            return null;
+        }
     }
-    
+
     /**
      * Declare an error
-     * 
+     *
      * @param string $error code for the error (default is "error")
      * @return bool always false (usefull to direcly return after an error)
      */
@@ -325,62 +402,80 @@ class entity implements tree_interface {
         $this->error = $error;
         return false;
     }
-    
+
     /**
      * Update the tree from this node (including this node)
-     * 
+     *
      * @param array|string|int full tree or values to update this tree or node
      * @param array|string|int full tree or previous values before updating this tree or node
      * @return array|string|int full tree from this node or value of the node
      */
-    function update($data, $previous = null) {
-        // Update the fields
-        if ($this->onlyget) return $this->error("notfound");
-        if (!is_object($data) and !is_array($data)) return $this->error("error");
+    public function update($data, $previous = null) {
+        // Update the fields.
+        if ($this->onlyget) {
+            return $this->error("notfound");
+        }
+        if (!is_object($data) && !is_array($data)) {
+            return $this->error("error");
+        }
         $ko = false;
         foreach ($data as $index => $value) {
             if (!isset($this->fields[$index])) {
-                $this->fieldsError[$index] = "notfound";
+                $this->fieldserror[$index] = "notfound";
                 continue;
             }
-            if (!empty($previous) and isset($previous->$index)) $thatprevious = $previous->$index;
-            else $thatprevious = null;
-            if ( ! $this->fields[$index]->update($value, $thatprevious)) {
+            if (!empty($previous) && isset($previous->$index)) {
+                $thatprevious = $previous->$index;
+            } else {
+                $thatprevious = null;
+            }
+            if (! $this->fields[$index]->update($value, $thatprevious)) {
                 $ko = true;
-                $this->fieldsError[$index] = "partial";
+                $this->fieldserror[$index] = "partial";
             }
         }
         return !$ko;
     }
-    
+
     /**
      * Get the tree of errors
-     * 
+     *
      * @return array|string|int full tree of errors encoutered when working with this tree / node
      */
-    function get_errors() {
-        // Return all errors in the tree
-        if ($this->error != "ok") return $this->error;
-        if (empty($this->fieldsError)) return null;
+    public function get_errors() {
+        // Return all errors in the tree.
+        if ($this->error != "ok") {
+            return $this->error;
+        }
+        if (empty($this->fieldserror)) {
+            return null;
+        }
         $result = [];
-        foreach ($this->fieldsError as $index => $error) {
+        foreach ($this->fieldserror as $index => $error) {
             if ($error == "partial") {
                 $subresult = $this->fields[$index]->get_errors();
-                if (!empty($subresult)) $result[$index] = $subresult;
-            } else if ($error != "ok") $result[$index] = $error;
+                if (!empty($subresult)) {
+                    $result[$index] = $subresult;
+                }
+            } else if ($error != "ok") {
+                $result[$index] = $error;
+            }
         }
-        if (empty($result)) return null;
-        else return $result;
+        if (empty($result)) {
+            return null;
+        } else {
+            return $result;
+        }
     }
-    
+
     /**
      * Declare this node as a node only for get entry point, not updatable by the set entry point
-     * 
+     *
      * This is useful to describe the same nodes for get and set, but to protect the node from any update
-     * 
+     *
      * @return tree_interface the object itself (return $this)
-     */    
-    function only_get() {
+     */
+    public function only_get() {
         $this->onlyget = true;
         return $this;
     }

@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage the entity "course"
  *
@@ -26,22 +27,25 @@ namespace local_ezxlate\entities;
 
 /**
  * Class to manage the tree of a course (see API documentation)
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class course extends \local_ezxlate\entity {
-    
+    /** @var string $maintable main table of the entity */
     protected $maintable = "course";
-    
+
+    /**
+     * Define the managed fields and sub-entities of this entity
+     */
     protected function define_fields() {
         $this->add_field("courseid:id")->only_get();
         $this->add_field("shortname")->only_get();
         $this->add_fields("fullname", "summary");
         $this->add_entities_from_table("sections", "section", "course_sections", ["course" => "id" ], "id")
-                ->only_get();
+            ->only_get();
     }
 }

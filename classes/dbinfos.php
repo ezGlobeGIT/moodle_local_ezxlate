@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage database structure (including extendings fields)
  *
@@ -26,7 +27,7 @@ namespace local_ezxlate;
 
 /**
  * Class to access data structure (using Moodle API)
- * 
+ *
  * This class provides only static methods
  *
  * @package    local_ezxlate
@@ -34,113 +35,185 @@ namespace local_ezxlate;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class dbinfos {
-    
-    /** 
+    /**
      * Cache for field sizes
      *      array, index is a table name, associated value is an array of fields of this table :
      *          Indexed by field name, value is false (field doesn't exists,  or maximum length (only text fields)
-     *            
-     * @var array $tables Cache for field sizes 
+     *
+     * @var array $tables Cache for field sizes
      */
-    static protected $tables = [];
-    
-    /** 
+    protected static $tables = [];
+
+    /**
      * array to keep initial maximal lenght value, when a field structure is modified
      * Same structure as $table (but for initial values)
-     *            
-     * @var array $initial Initial fields sizes 
-     */    
-    static protected $initial = [];    // As tables, but only for modified fields, with the initial length
-    
+     *
+     * @var array $initial Initial fields sizes
+     */
+    protected static $initial = [];
+
     /** @var bool $canextend tue if we have and are allowed to extends fields when they are too little */
-    static protected $canextend = null;
-    
-    
-    static function can_extend() {
-        global $CFG, $DB;
-        if ( is_null(static::$canextend)) {
-            if (get_config("local_ezxlate", "extend") == 0 ) static::$canextend = false;
-            else static::$canextend = true;
+    protected static $canextend = null;
+
+    /**
+     * Check if fields extension is allowed by the settings, and supported by the database
+     *
+     * @return bool true if allowed
+     */
+    public static function can_extend() {
+        global $DB;
+        if (is_null(static::$canextend)) {
+            // Fields extension is only supported on the MySQL family (see the specifications).
+            static::$canextend = get_config("local_ezxlate", "extend") == 1 && $DB->get_dbfamily() === 'mysql';
         }
         return static::$canextend;
     }
-    
-    static function adjust_field($table, $field, $len) {
+
+    /**
+     * Extend a text field (char) in the database schema to hold a value, up to 1333 characters
+     *
+     * @param string $table table name (without prefix)
+     * @param string $field field name
+     * @param int $len length of the value to store
+     * @return bool true if the field was extended
+     */
+    public static function adjust_field($table, $field, $len) {
         global $DB;
-        // Check if it's allowed to extend the size of the field in database structure
-        if (!static::can_extend()) return false;
-        
+        // Check if it's allowed to extend the size of the field in database structure.
+        if (!static::can_extend()) {
+            return false;
+        }
+
         $size = static::get_field_size($table, $field);
-        if ($size >= 1333 or empty($size) or $size == -1 or $size >= $len) return false; 
-                // We extend don't need or can't extend
-        
-        // Compute the new size, as a multiple of 256 minus 1, able to contain $len bytes
+        // No extension needed, or not possible.
+        if ($size >= 1333 || empty($size) || $size == -1 || $size >= $len) {
+            return false;
+        }
+
+        $initialsize = $size;
+
+        // Compute the new size, as a multiple of 256 minus 1, able to contain $len bytes.
         $size = 255;
-        if ( $len > $size) $size = 511;
-        if ( $len > $size) $size = 1023;
-        if ( $len > $size) $size = 1333;
-        if ($len > $size) return false;     // We can't extend enough
-        
-                
-        // Store size before extending it's it's the first extend in this API call
-        if ( ! isset(static::$initial[$table])) static::$initial[$table] = [];
-        if ( ! isset(static::$initial[$table][$field])) static::$initial[$table][$field] = $size;
-        
-        // Change the maximal lengh
+        if ($len > $size) {
+            $size = 511;
+        }
+        if ($len > $size) {
+            $size = 1023;
+        }
+        if ($len > $size) {
+            $size = 1333;
+        }
+        if ($len > $size) {
+            return false;     // We can't extend enough.
+        }
+
+        // An indexed column can't be extended: the DDL refuses it, and the index length is limited.
+        if (static::is_indexed($table, $field)) {
+            return false;
+        }
+
+        // Change the maximal lengh, keeping the NOT NULL and DEFAULT clauses of the column:
+        // the DDL generators rebuild the whole column from the xmldb_field definition.
+        $col = $DB->get_columns($table, false)[$field];
+        if ($col->meta_type !== 'C') {
+            return false;     // Only character fields are extended, never their type.
+        }
         $dbman = $DB->get_manager();
         $dbtable = new \xmldb_table($table);
-        $dbfield = new \xmldb_field($field, XMLDB_TYPE_CHAR, "$size");
-        $dbman->change_field_precision($dbtable, $dbfield);
-        
-        // Update current size
+        $dbfield = new \xmldb_field(
+            $field,
+            XMLDB_TYPE_CHAR,
+            "$size",
+            null,
+            $col->not_null ? XMLDB_NOTNULL : null,
+            null,
+            $col->has_default ? $col->default_value : null
+        );
+        try {
+            $dbman->change_field_precision($dbtable, $dbfield);
+        } catch (\moodle_exception $e) {
+            debugging("local_ezxlate: extension of $table.$field failed: " . $e->getMessage(), DEBUG_DEVELOPER);
+            return false;
+        }
+
+        // Store size before extending if it's the first extend in this API call.
+        if (! isset(static::$initial[$table][$field])) {
+            static::$initial[$table][$field] = $initialsize;
+        }
+
+        // Update current size.
         static::get_field_size($table, $field, true);
-        
+
         return true;
     }
-    
+
+    /**
+     * Tell if a column belongs to an index (other than the primary key)
+     *
+     * @param string $table table name (without prefix)
+     * @param string $field field name
+     * @return bool true if the column is indexed
+     */
+    public static function is_indexed($table, $field) {
+        global $DB;
+        foreach ($DB->get_indexes($table) as $index) {
+            if (in_array($field, $index['columns'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Get all fields extension we did from the API call (to prodide the list in the answer)
-     * 
+     *
      * @return array array of array [ "tableName => [ fieldName => "previousSize" => x, "newSize" => y ], ... ], ... ]
      */
-    static function get_extensions() {
+    public static function get_extensions() {
         $result = [];
-        foreach(static::$initial as $table => $fields) {
+        foreach (static::$initial as $table => $fields) {
             $result[$table] = [];
-            foreach($fields as $name => $size) {
+            foreach ($fields as $name => $size) {
                 $result[$table][$name] = [ "previousSize" => $size,
-                            "newSize" =>  static::get_field_size($table, $name)];
+                            "newSize" => static::get_field_size($table, $name)];
             }
         }
         return $result;
     }
-    
+
     /**
      * Get the maximum length of a field
-     * 
+     *
      * @param string $table Name of the table
      * @param string $field Name of the field
      * @param bool $force true to force the request on data structure, false to use cache of this class
      * @return int size of the field
      */
-    static function get_field_size($table, $field, $force = false) {
+    public static function get_field_size($table, $field, $force = false) {
         global $CFG, $DB;
-        
+
         // Already in local cache ?
-        if (isset(static::$tables[$table][$field]) and !$force) 
+        if (isset(static::$tables[$table][$field]) && !$force) {
             return static::$tables[$table][$field];
-        
-        if ( ! isset(static::$tables[$table])) static::$tables[$table] = [];
-        $columns = $DB->get_columns($table, false);
-        if (empty($columns[$field])) static::$tables[$table][$field] = false;   // false if $field doesn't exist
-        else {
-            $col = $columns[$field];
-            if (empty($col->max_length)) static::$tables[$table][$field] = false;
-            else if ($col->max_length == -1) static::$tables[$table][$field] = 1024 * 1024 * 1024;     // Very long....
-            else static::$tables[$table][$field] = $col->max_length;
         }
-        
+
+        if (! isset(static::$tables[$table])) {
+            static::$tables[$table] = [];
+        }
+        $columns = $DB->get_columns($table, false);
+        if (empty($columns[$field])) {
+            static::$tables[$table][$field] = false;   // False if $field doesn't exist.
+        } else {
+            $col = $columns[$field];
+            if (empty($col->max_length)) {
+                static::$tables[$table][$field] = false;
+            } else if ($col->max_length == -1) {
+                static::$tables[$table][$field] = 1024 * 1024 * 1024;     // Very long....
+            } else {
+                static::$tables[$table][$field] = $col->max_length;
+            }
+        }
+
         return static::$tables[$table][$field];
     }
-
 }

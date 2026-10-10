@@ -13,7 +13,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
+ * Privacy provider for local_ezxlate
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @author     Christophe Blanchot <cblanchot@cbcd.fr>
@@ -24,11 +27,20 @@ namespace local_ezxlate\privacy;
 
 use core_privacy\local\metadata\null_provider;
 
-
+/**
+ * Privacy provider: the plugin does not store any personal data
+ *
+ * @package    local_ezxlate
+ * @copyright  2025 EzGlobe
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class provider implements null_provider {
-    
+    /**
+     * Get the language string identifier explaining why this plugin stores no data
+     *
+     * @return string language string identifier
+     */
     public static function get_reason(): string {
         return 'privacy:metadata';
     }
-    
 }

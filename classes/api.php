@@ -40,7 +40,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class api {
-
     /** @var null|stdClass $param Parameters received by API */
     protected $param = null;
 
@@ -51,17 +50,19 @@ abstract class api {
     protected $answer = null;
 
     /**
-     * Build the answer in case of error 
+     * Build the answer in case of error
      * (static method to be used anywhere)
      *
      * @param string $code error code (default "error", other error)
-     * @param string $code error message 
+     * @param string $code error message
      * @return stdClass Returns the object to convert in JSON
      */
-    static function failed($code = 'error', $message = '') {
+    public static function failed($code = 'error', $message = '') {
         $answer = new \stdClass();
         $answer->code = $code;
-        if ( !empty($message)) $answer->message = $message;
+        if (!empty($message)) {
+            $answer->message = $message;
+        }
         return $answer;
     }
 
@@ -69,8 +70,8 @@ abstract class api {
      * Constructor
      *
      * @param stdClass $param parmeters sent by the client, in object format (after Json decoding)
-     */    
-    function __construct($param) {
+     */
+    public function __construct($param) {
         $this->param = (object) $param;
     }
 
@@ -79,28 +80,36 @@ abstract class api {
      *
      * @return stdClass Returns the final answer
      */
-    function process() {
-        // Prepare answer and data for answer
+    public function process() {
+        // Prepare answer and data for answer.
         $this->data = new \stdClass();
         $this->answer = new \stdClass();
         $this->answer->code = "ok";
-        
-        // Check authentification, return eror message if auhentication is not completed
-        if ( !empty($message = $this->check_authentification())) return $this->error("auth", $message);
-        
-        // Check and analyse other parameters
+
+        // Check authentification, return eror message if auhentication is not completed.
+        if (!empty($message = $this->check_authentification())) {
+            return $this->error("auth", $message);
+        }
+
+        // Check and analyse other parameters.
         $answer = $this->check_parameters();
-        if (!empty($answer)) return $answer;
-        
-        // Launch the method to execute
+        if (!empty($answer)) {
+            return $answer;
+        }
+
+        // Launch the method to execute.
         try {
             $answer = $this->do();
         } catch (\Throwable $e) {
             return $this->error('error', $e->getMessage());
         }
-        // The method can build the answer and datas in attributes (answer, data), or directly return the answer
-        if (empty($answer)) $answer = $this->answer;
-        if (empty($answer->data) and !empty((array) $this->data)) $answer->data = $this->data;
+        // The method can build the answer and datas in attributes (answer, data), or directly return the answer.
+        if (empty($answer)) {
+            $answer = $this->answer;
+        }
+        if (empty($answer->data) && !empty((array) $this->data)) {
+            $answer->data = $this->data;
+        }
         return $answer;
     }
 
@@ -115,84 +124,104 @@ abstract class api {
     }
 
     /**
-     * Launch the method depending of the precise request (usualy based on one of the sent parameters) 
+     * Launch the method depending of the precise request (usualy based on one of the sent parameters)
      * This method must be overloaded in inherited class
      *
      * @return stdClass|null Returns the final answer, or null if the answer is bulits in attributes (answer, data)
      */
     abstract protected function do();
-    
+
     /**
-     * Build the answer in case of error 
+     * Build the answer in case of error
      *
      * @param string $code error code (default "error", other error)
-     * @param string $code error message 
+     * @param string $code error message
      * @return stdClass Returns the object to convert in JSON
      */
-    function error($code = "error", $message = "") {
+    public function error($code = "error", $message = "") {
         return static::failed($code, $message);
     }
-    
+
     /**
      * Check authentification, from parameters
      *
      * @return string|null Returns the error message, or null when authentication is completed
      */
     protected function check_authentification() {
-        // Is API enabled
-        if ( get_config("local_ezxlate", "open") != 1 ) return "API disabled";
-        // Check key
-        if ( empty(get_config("local_ezxlate", "key"))) return "Empty key, API disabled";
-        if ( strlen(get_config("local_ezxlate", "key")) < 10 ) return "Key is too short, API disabled";
-        if ( empty($this->param->key)) return "Key not provided in the request";
-        if ( $this->param->key != get_config("local_ezxlate", "key")) return "Authentification failed";
-        // Check client IP 
-        if ( $this->iprestricted() ) 
-            return "Your IP address " . strtolower(trim($_SERVER["REMOTE_ADDR"])) . " is not allowed";
-        // Check user to use for API actions
+        // Is API enabled.
+        if (get_config("local_ezxlate", "open") != 1) {
+            return "API disabled";
+        }
+        // Check key.
+        $key = (string) get_config("local_ezxlate", "key");
+        if ($key === "") {
+            return "Empty key, API disabled";
+        }
+        if (strlen($key) < 10) {
+            return "Key is too short, API disabled";
+        }
+        if (empty($this->param->key)) {
+            return "Key not provided in the request";
+        }
+        // Strict comparison: a loose one would accept a JSON boolean true as a valid key.
+        if (!is_string($this->param->key) || !hash_equals($key, $this->param->key)) {
+            return "Authentification failed";
+        }
+        // Check client IP.
+        if ($this->iprestricted()) {
+            return "Your IP address " . getremoteaddr() . " is not allowed";
+        }
+        // Check user to use for API actions.
         $userid = get_config("local_ezxlate", "userid");
-        if (empty($userid)) return "No user defined for the API";
+        if (empty($userid)) {
+            return "No user defined for the API";
+        }
         $user = \core_user::get_user($userid);
-        if (empty($user) or $user->deleted) return "User defined for the API doesn't exist";
-        if ($user->suspended) return "User defined for the API is suspended";
-        if (!has_capability('local/ezxlate:use', \context_system::instance(), $userid))
+        if (empty($user) || $user->deleted) {
+            return "User defined for the API doesn't exist";
+        }
+        if ($user->suspended) {
+            return "User defined for the API is suspended";
+        }
+        if (!has_capability('local/ezxlate:use', \context_system::instance(), $userid)) {
                 return "User defined for the API doesn't have the capability to use the API";
-        // Set the user as connected user
+        }
+        // Set the user as connected user.
         \core\session\manager::set_user($user);
-        
+
         return null;
     }
-    
+
     /**
      * Check if client IP is restricted or allowed
      *
      * @return bool True is IP is restricted, false if allowed
      */
     protected function iprestricted() {
-        // Get an array of allowed IPs from settings
+        // Get an array of allowed IPs from settings, with the admin_setting_configiplist syntax :
+        // one entry per line, "#" starts a comment, subnets (1.2.3.0/24, 1.2) and ranges (1.2.3.4-10) allowed.
         $ips = [];
-        foreach( explode("\n", str_replace(",", "\n", get_config("local_ezxlate", "ips"))) as $ip) {
-            $ip = strtolower(trim($ip));
-            if (!empty($ip)) $ips[] = $ip;
+        foreach (explode("\n", str_replace(",", "\n", get_config("local_ezxlate", "ips"))) as $line) {
+            $ip = trim(explode("#", $line)[0]);
+            if ($ip !== "") {
+                $ips[] = $ip;
+            }
         }
-        if (empty($ips)) return false;      // No IP in allowed list means no restrictions on IP adresses
-        
-        // Get client IP
-        $myip = strtolower(trim($_SERVER["REMOTE_ADDR"]));
-        foreach ($ips as $ip) {
-            if ($myip == $ip) return false;    // My IP is allowed
+        if (empty($ips)) {
+            return false;      // No IP in allowed list means no restrictions on IP adresses.
         }
-        // My IP is not found in allowed IP list
-        return true; 
+
+        // Client IP as seen by Moodle (takes the reverse proxy settings into account).
+        return !address_in_subnet(getremoteaddr(), implode(",", $ips));
     }
-    
+
     /**
      * Get version number of the plugin
      *
      * @return string Version number of the plugin
      */
-    function version() {
-        // Extract the version number of this plugin
+    public function version() {
+        // Extract the version number of this plugin.
         global $CFG;
         $pluginpath = $CFG->dirroot . '/local/ezxlate/version.php';
         if (file_exists($pluginpath)) {

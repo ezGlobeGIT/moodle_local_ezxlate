@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage the activity "feedback"
  *
@@ -26,20 +27,23 @@ namespace local_ezxlate\entities;
 
 /**
  * Class to manage an feedback plugin activity
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class feedback extends \local_ezxlate\entity {
-    
+    /** @var string $maintable main table of the entity */
     protected $maintable = "feedback";
-    
+
+    /**
+     * Define the managed fields and sub-entities of this entity
+     */
     protected function define_fields() {
         $this->add_fields("name", "intro", "page_after_submit");
         $this->fields["name"]->gradebook();
-        $this->add_entities_from_table("chapters",  [ "title", "content"], "book_chapters", "bookid");
+        $this->add_entities_from_table("items", "feedback_item", "feedback_item", "feedback");
     }
 }

@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage the entity "questionnaire_question"
  *
@@ -26,19 +27,23 @@ namespace local_ezxlate\entities;
 
 /**
  * Class to manage a question of a questionnaire
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class questionnaire_question extends \local_ezxlate\entity {
-    
+    /** @var string $maintable main table of the entity */
     protected $maintable = "questionnaire_question";
-    
+
+    /**
+     * Define the managed fields and sub-entities of this entity
+     */
     protected function define_fields() {
-        $this->add_fields("content", "extradata");
-        $this->add_entities_from_table("choices",  [ "content"], "questionnaire_quest_choice", "question_id");
+        // Field "extradata" is JSON (slider ranges and labels, rate named degrees) : not a text to translate.
+        $this->add_fields("content");
+        $this->add_entities_from_table("choices", [ "content"], "questionnaire_quest_choice", "question_id");
     }
 }

@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage api with "infos" command
  *
@@ -24,8 +25,8 @@
 
 namespace local_ezxlate;
 
-use \DateTime;
-use \stdClass;
+use DateTime;
+use stdClass;
 
 /**
  * Class to manage API for entry point : infos.php
@@ -37,10 +38,14 @@ use \stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class api_infos extends api {
-        
+    /**
+     * Build the answer: plugin version and available features
+     *
+     * @return null answer built in attributes
+     */
     protected function do() {
         // Process the precise action : prepare the informations
-        // Return a std object with code and other properties
+        // Return a std object with code and other properties.
         $this->answer->version = $this->version();
         $this->answer->previousVerification = (get_config("local_ezxlate", "previous") == 1 ? 1 : 0);
         $this->answer->fieldsExtension = (dbinfos::can_extend() ? 1 : 0);

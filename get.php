@@ -13,25 +13,26 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
-/*
+
+/**
+ * Entry point of the "get" API (get texts to translate)
+ *
+ * See documentation for parameters and returned informations.
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @author     Christophe Blanchot <cblanchot@cbcd.fr>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-/*
- * This program is the entry point for the "get" API (get texts to translate)
- * See documentation for parameters and returned informations
- */
-
 define('AJAX_SCRIPT', true);
 define('WS_SERVER', false);
+define('NO_MOODLE_COOKIES', true);   // API calls authenticated by key : no session, as for web services.
 
 require('../../config.php');
 require('locallib.php');
 
-$parameters = local_ezxlate_get_parameters();    // Directly exit if not correct
+$parameters = local_ezxlate_get_parameters();    // Directly exit if not correct.
 
 $api = new \local_ezxlate\api_get($parameters);
-local_ezxlate_return( $api->process());
+local_ezxlate_return($api->process());

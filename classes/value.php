@@ -13,6 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
 /**
  * Class to manage entity fields not directly connected to DB
  *
@@ -26,39 +27,79 @@ namespace local_ezxlate;
 
 /**
  * Class to manage a direct value (so not attached to the database)
- * 
+ *
  * See local_ezxlate\entity and local_ezxlate\tree_interface
- * 
+ *
  * @package    local_ezxlate
  * @copyright  2025 EzGlobe
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class value implements tree_interface {
-    
+    /**
+     * @var mixed $value the value
+     */
     protected $value;
+    /**
+     * @var bool $onlyget always true in practice: a direct value can't be updated
+     */
     protected $onlyget = false;
+    /**
+     * @var string $error result code of update ("ok" or error code)
+     */
     protected $error = "ok";
-    
-    function __construct($value) {
+
+    /**
+     * Constructor
+     *
+     * @param mixed $value the value
+     */
+    public function __construct($value) {
          $this->value = $value;
     }
-    function only_get() {
+    /**
+     * Tell this value is available only to get information and can't be updated
+     *
+     * @return value this object
+     */
+    public function only_get() {
         $this->onlyget = true;
         return $this;
     }
 
-    function get() {
-        if ($this->value === 0 or $this->value === "0") return 0;
-        if (empty($this->value)) return null;
+    /**
+     * Get the value
+     *
+     * @return mixed the value, 0 for zero, null if empty
+     */
+    public function get() {
+        if ($this->value === 0 || $this->value === "0") {
+            return 0;
+        }
+        if (empty($this->value)) {
+            return null;
+        }
         return $this->value;
     }
-    
-    function update($newValue, $previous = null) {
-        $this->error = "notfound";      // simple values can't be updated
+
+    /**
+     * Update the value: not possible for a direct value, sets the "notfound" error
+     *
+     * @param mixed $newvalue new value
+     * @param mixed $previous expected current value
+     */
+    public function update($newvalue, $previous = null) {
+        $this->error = "notfound";      // Simple values can't be updated.
     }
-    
-    function get_errors() {
-        // Return all errors in the tree
-        if ($this->error != "ok") return $this->error;
+
+    /**
+     * Get the update error
+     *
+     * @return string|null error code, null if no error
+     */
+    public function get_errors() {
+        // Return all errors in the tree.
+        if ($this->error != "ok") {
+            return $this->error;
+        }
     }
 }
